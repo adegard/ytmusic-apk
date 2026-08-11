@@ -3,5 +3,5 @@
     <string name="app_name">YT Music Search</string>
     <string name="search_hint">Search YouTube songs…</string>
     <string name="search">Search</string>
-    <string name="no_results">No results found</string>
+    <string name="no_results">No results found. Try a different search or check your internet connection.</string>
 </resources>

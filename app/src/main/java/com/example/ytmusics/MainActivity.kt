@@ -7,6 +7,9 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
@@ -38,6 +41,8 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        applyWindowInsets()
+
         YouTubeApi.init(DownloaderProvider.downloader())
 
         adapter = SongAdapter { song -> playSong(song) }
@@ -65,6 +70,16 @@ class MainActivity : AppCompatActivity() {
     private fun isDebuggable(): Boolean =
         (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
+    private fun applyWindowInsets() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
+            val bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(binding.root)
+    }
+
     private fun doSearch() {
         val query = binding.searchInput.text.toString().trim()
         if (query.isEmpty()) return
@@ -87,7 +102,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Search failed", e)
                 binding.emptyText.isVisible = true
-                binding.emptyText.text = "Search failed: ${e.message}"
+                binding.emptyText.text = "Search failed: ${e.message ?: e.javaClass.simpleName}"
             } finally {
                 binding.progress.isVisible = false
             }
