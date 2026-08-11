@@ -1,6 +1,8 @@
 package com.example.ytmusics
 
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.util.Log
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
@@ -22,6 +24,10 @@ import com.example.ytmusics.ui.SongAdapter
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
+
+    private companion object {
+        const val TAG = "YTMusic"
+    }
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: SongAdapter
@@ -49,7 +55,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupPlayer()
+
+        if (isDebuggable() && intent.getStringExtra("auto_search") != null) {
+            binding.searchInput.setText(intent.getStringExtra("auto_search"))
+            doSearch()
+        }
     }
+
+    private fun isDebuggable(): Boolean =
+        (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     private fun doSearch() {
         val query = binding.searchInput.text.toString().trim()
@@ -62,13 +76,16 @@ class MainActivity : AppCompatActivity() {
         binding.emptyText.isVisible = false
         binding.emptyText.setText(R.string.search_hint)
 
+        Log.d(TAG, "Searching for: $query")
         lifecycleScope.launch {
             try {
                 val results = YouTubeApi.search(query)
+                Log.d(TAG, "Search returned ${results.size} results")
                 adapter.submitList(results)
                 binding.emptyText.isVisible = results.isEmpty()
                 if (results.isEmpty()) binding.emptyText.setText(R.string.no_results)
             } catch (e: Exception) {
+                Log.e(TAG, "Search failed", e)
                 binding.emptyText.isVisible = true
                 binding.emptyText.text = "Search failed: ${e.message}"
             } finally {
@@ -91,6 +108,7 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
                 binding.nowPlaying.text = info.name
+                Log.d(TAG, "Playing '${info.name}' stream: ${stream.id.take(80)}")
                 player?.setMediaItem(MediaItem.fromUri(stream.id))
                 player?.prepare()
                 player?.playWhenReady = true
