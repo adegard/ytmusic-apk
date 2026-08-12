@@ -112,6 +112,14 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     binding.emptyText.setText(getString(R.string.found_count, results.size))
                 }
+                binding.recycler.post {
+                    DebugLog.log(
+                        "layout: emptyText h=${binding.emptyText.height} " +
+                            "recycler h=${binding.recycler.height} w=${binding.recycler.width} " +
+                            "children=${binding.recycler.childCount} items=${adapter.itemCount} " +
+                            "player h=${binding.playerView.height}"
+                    )
+                }
             } catch (e: TimeoutCancellationException) {
                 DebugLog.logException("Search TIMEOUT for '$query'", e)
                 binding.emptyText.setText(R.string.search_timeout)
