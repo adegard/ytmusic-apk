@@ -45,13 +45,10 @@ object YouTubeApi {
     }
 
     fun pickAudioStream(streamInfo: StreamInfo): AudioStream? {
-        val streams = streamInfo.audioStreams
-        val progressive = streams
-            .filter { !it.id.contains("manifest") }
+        val streams = streamInfo.audioStreams.filterNot { it.url?.contains(".m3u8") == true }
+        val mp4 = streams
+            .filter { it.getFormat()?.mimeType == "audio/mp4" }
             .maxByOrNull { it.bitrate }
-        val dash = streams
-            .filter { it.id.contains("manifest") }
-            .maxByOrNull { it.bitrate }
-        return progressive ?: dash
+        return mp4 ?: streams.maxByOrNull { it.bitrate }
     }
 }

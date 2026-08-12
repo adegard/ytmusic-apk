@@ -20,17 +20,16 @@ object DebugLog {
 
     private const val PUBLIC_NAME = "ytmusic-debug.log"
 
-    private var file: File? = null
+    private val files = mutableListOf<File>()
     private var appContext: Context? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
-        val f = File(context.getExternalFilesDir(null) ?: context.filesDir, PUBLIC_NAME)
-        try {
-            f.parentFile?.mkdirs()
-        } catch (_: Exception) {
-        }
-        file = f
+        val extDir = context.getExternalFilesDir(null)
+        if (extDir != null) files.add(File(extDir, PUBLIC_NAME))
+        files.add(File(context.filesDir, PUBLIC_NAME))
+        files.add(File(Environment.getExternalStorageDirectory(), "Download/$PUBLIC_NAME"))
+        files.forEach { runCatching { it.parentFile?.mkdirs() } }
         val versionName = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull()
@@ -39,7 +38,7 @@ object DebugLog {
                 "device=${Build.MANUFACTURER} ${Build.MODEL}\n" +
                 "android=${Build.VERSION.RELEASE} (sdk ${Build.VERSION.SDK_INT})\n" +
                 "version=$versionName\n" +
-                "logfile=$f"
+                "logdirs=${files.map { it.parent }.joinToString(" | ")}"
         )
     }
 
@@ -51,9 +50,11 @@ object DebugLog {
             Log.d(TAG, msg)
         } catch (_: Exception) {
         }
-        try {
-            file?.appendText(line + "\n")
-        } catch (_: Exception) {
+        files.forEach { f ->
+            try {
+                f.appendText(line + "\n")
+            } catch (_: Exception) {
+            }
         }
         mirrorToPublic()
     }
@@ -67,8 +68,8 @@ object DebugLog {
 
     private fun mirrorToPublic() {
         val ctx = appContext ?: return
-        val f = file ?: return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val src = files.firstOrNull { it.exists() } ?: return
         try {
             val resolver = ctx.contentResolver
             val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
@@ -85,7 +86,7 @@ object DebugLog {
             }
             val uri: Uri? = resolver.insert(collection, values)
             if (uri != null) {
-                resolver.openOutputStream(uri)?.use { it.write(f.readText().toByteArray()) }
+                resolver.openOutputStream(uri)?.use { it.write(src.readText().toByteArray()) }
                 values.clear()
                 values.put(MediaStore.Downloads.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)

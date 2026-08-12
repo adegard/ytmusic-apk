@@ -13,7 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -149,9 +149,19 @@ class MainActivity : AppCompatActivity() {
                     binding.nowPlaying.text = info.name
                     return@launch
                 }
-                DebugLog.log("Playing '${info.name}' stream: ${stream.id.take(120)}")
+                val streamUrl = stream.url ?: run {
+                    DebugLog.log("Stream has no URL for '${song.title}'")
+                    Toast.makeText(
+                        this@MainActivity,
+                        "No playable audio stream found",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    binding.nowPlaying.text = info.name
+                    return@launch
+                }
+                DebugLog.log("Playing '${info.name}' stream: $streamUrl")
                 binding.nowPlaying.text = info.name
-                player?.setMediaItem(MediaItem.fromUri(stream.id))
+                player?.setMediaItem(MediaItem.fromUri(streamUrl))
                 player?.prepare()
                 player?.playWhenReady = true
             } catch (e: TimeoutCancellationException) {
@@ -169,10 +179,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupPlayer() {
-        val userAgent =
-            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) " +
-                "Chrome/119.0.0.0 Mobile Safari/537.36"
-        val dataSourceFactory = DefaultHttpDataSource.Factory().setUserAgent(userAgent)
+        val dataSourceFactory = OkHttpDataSource.Factory(DownloaderProvider.okHttpClient())
+            .setDefaultRequestProperties(mapOf("Referer" to "https://www.youtube.com/"))
 
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(
@@ -186,11 +194,16 @@ class MainActivity : AppCompatActivity() {
 
         player?.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
+                DebugLog.logException(
+                    "PLAYBACK ERROR code=${error.errorCodeName} msg=${error.message}",
+                    error
+                )
                 Toast.makeText(
                     this@MainActivity,
-                    "Playback error: ${error.message}",
+                    "Playback error: ${error.errorCodeName}\n${error.message}",
                     Toast.LENGTH_LONG
                 ).show()
+                binding.nowPlaying.text = "Playback error: ${error.errorCodeName}"
             }
         })
     }
