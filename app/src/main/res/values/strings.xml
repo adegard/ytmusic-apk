@@ -2,6 +2,12 @@
 <resources>
     <string name="app_name">YT Music Search</string>
     <string name="search_hint">Search YouTube songs…</string>
+    <string name="initial_hint">Type a song name and press Search</string>
+    <string name="searching">Searching for \"%1$s\"…</string>
+    <string name="found_count">Found %1$d results</string>
+    <string name="search_timeout">Search timed out. Try again.</string>
+    <string name="loading_stream">Loading stream info…</string>
+    <string name="stream_timeout">Stream info timed out. Try another song.</string>
     <string name="search">Search</string>
     <string name="no_results">No results found. Try a different search or check your internet connection.</string>
 </resources>

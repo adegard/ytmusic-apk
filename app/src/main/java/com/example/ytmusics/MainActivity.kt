@@ -2,8 +2,6 @@ package com.example.ytmusics
 
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
-import android.util.Log
-import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -24,7 +22,9 @@ import com.example.ytmusics.data.YouTubeApi
 import com.example.ytmusics.databinding.ActivityMainBinding
 import com.example.ytmusics.net.DownloaderProvider
 import com.example.ytmusics.ui.SongAdapter
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,8 +38,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                DebugLog.logException("UNCAUGHT on ${thread.name}", throwable)
+            } catch (_: Throwable) {
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        DebugLog.init(this)
+        DebugLog.log("onCreate: auto_search=${intent.getStringExtra("auto_search")}")
 
         applyWindowInsets()
 
@@ -50,13 +63,9 @@ class MainActivity : AppCompatActivity() {
         binding.recycler.adapter = adapter
 
         binding.searchButton.setOnClickListener { doSearch() }
-        binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                doSearch()
-                true
-            } else {
-                false
-            }
+        binding.searchInput.setOnEditorActionListener { _, _, _ ->
+            doSearch()
+            true
         }
 
         setupPlayer()
@@ -84,24 +93,30 @@ class MainActivity : AppCompatActivity() {
         val query = binding.searchInput.text.toString().trim()
         if (query.isEmpty()) return
 
+        DebugLog.log("Search requested: '$query'")
+
         val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(binding.searchInput.windowToken, 0)
 
         binding.progress.isVisible = true
-        binding.emptyText.isVisible = false
-        binding.emptyText.setText(R.string.search_hint)
+        binding.emptyText.isVisible = true
+        binding.emptyText.setText(getString(R.string.searching, query))
 
-        Log.d(TAG, "Searching for: $query")
         lifecycleScope.launch {
             try {
-                val results = YouTubeApi.search(query)
-                Log.d(TAG, "Search returned ${results.size} results")
+                val results = withTimeout(60_000) { YouTubeApi.search(query) }
+                DebugLog.log("Search returned ${results.size} results for '$query'")
                 adapter.submitList(results)
-                binding.emptyText.isVisible = results.isEmpty()
-                if (results.isEmpty()) binding.emptyText.setText(R.string.no_results)
+                if (results.isEmpty()) {
+                    binding.emptyText.setText(R.string.no_results)
+                } else {
+                    binding.emptyText.setText(getString(R.string.found_count, results.size))
+                }
+            } catch (e: TimeoutCancellationException) {
+                DebugLog.logException("Search TIMEOUT for '$query'", e)
+                binding.emptyText.setText(R.string.search_timeout)
             } catch (e: Exception) {
-                Log.e(TAG, "Search failed", e)
-                binding.emptyText.isVisible = true
+                DebugLog.logException("Search FAILED for '$query'", e)
                 binding.emptyText.text = "Search failed: ${e.message ?: e.javaClass.simpleName}"
             } finally {
                 binding.progress.isVisible = false
@@ -110,27 +125,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playSong(song: SongResult) {
+        DebugLog.log("Play requested: ${song.title} :: ${song.url}")
         lifecycleScope.launch {
             try {
-                val info = YouTubeApi.resolveStreamInfo(song.url)
+                binding.nowPlaying.text = getString(R.string.loading_stream)
+                val info = withTimeout(60_000) { YouTubeApi.resolveStreamInfo(song.url) }
                 val stream = YouTubeApi.pickAudioStream(info)
                 if (stream == null) {
+                    DebugLog.log("No audio stream for '${song.title}'")
                     Toast.makeText(
                         this@MainActivity,
                         "No playable audio stream found",
                         Toast.LENGTH_SHORT
                     ).show()
+                    binding.nowPlaying.text = info.name
                     return@launch
                 }
+                DebugLog.log("Playing '${info.name}' stream: ${stream.id.take(120)}")
                 binding.nowPlaying.text = info.name
-                Log.d(TAG, "Playing '${info.name}' stream: ${stream.id.take(80)}")
                 player?.setMediaItem(MediaItem.fromUri(stream.id))
                 player?.prepare()
                 player?.playWhenReady = true
+            } catch (e: TimeoutCancellationException) {
+                DebugLog.logException("Stream resolve TIMEOUT for '${song.title}'", e)
+                binding.nowPlaying.text = getString(R.string.stream_timeout)
             } catch (e: Exception) {
+                DebugLog.logException("Play FAILED for '${song.title}'", e)
                 Toast.makeText(
                     this@MainActivity,
-                    "Failed to play: ${e.message}",
+                    "Failed to play: ${e.message ?: e.javaClass.simpleName}",
                     Toast.LENGTH_LONG
                 ).show()
             }

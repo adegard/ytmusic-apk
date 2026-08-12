@@ -44,9 +44,8 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:padding="24dp"
-        android:text="@string/search_hint"
-        android:textColor="?android:attr/textColorSecondary"
-        android:visibility="gone" />
+        android:text="@string/initial_hint"
+        android:textColor="?android:attr/textColorSecondary" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler"
