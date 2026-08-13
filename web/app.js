@@ -193,7 +193,7 @@ function renderResults(results) {
     item.appendChild(dur);
 
     item.addEventListener("click", function () {
-      play(result);
+      play(r);
     });
     resultsEl.appendChild(item);
   }
