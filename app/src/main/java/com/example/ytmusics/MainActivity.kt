@@ -1,10 +1,15 @@
 package com.example.ytmusics
 
+import android.Manifest
+import android.content.ComponentName
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -13,9 +18,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.ytmusics.data.SongResult
 import com.example.ytmusics.data.YouTubeApi
@@ -30,23 +34,16 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val TAG = "YTMusic"
+        const val PERMISSION_REQUEST_NOTIFICATIONS = 100
     }
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: SongAdapter
-    private var player: ExoPlayer? = null
+    private var mediaController: MediaController? = null
+    private var pendingSong: SongResult? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                DebugLog.logException("UNCAUGHT on ${thread.name}", throwable)
-            } catch (_: Throwable) {
-            }
-            defaultHandler?.uncaughtException(thread, throwable)
-        }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -55,6 +52,8 @@ class MainActivity : AppCompatActivity() {
         DebugLog.log("onCreate: auto_search=${intent.getStringExtra("auto_search")}")
 
         applyWindowInsets()
+
+        requestNotificationPermission()
 
         YouTubeApi.init(DownloaderProvider.downloader())
 
@@ -68,12 +67,65 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        setupPlayer()
+        connectToPlaybackService()
 
         if (isDebuggable() && intent.getStringExtra("auto_search") != null) {
             binding.searchInput.setText(intent.getStringExtra("auto_search"))
             doSearch()
         }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                PERMISSION_REQUEST_NOTIFICATIONS
+            )
+        }
+    }
+
+    private fun connectToPlaybackService() {
+        val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
+        val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
+        controllerFuture.addListener({
+            val controller = controllerFuture.get()
+            mediaController = controller
+            binding.playerView.player = controller
+            binding.playerView.setShowNextButton(false)
+            binding.playerView.setShowPreviousButton(false)
+
+            controller.addListener(object : Player.Listener {
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (mediaItem != null) {
+                        binding.nowPlaying.text =
+                            mediaItem.mediaMetadata.title?.toString() ?: getString(R.string.app_name)
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    DebugLog.logException(
+                        "PLAYBACK ERROR code=${error.errorCodeName} msg=${error.message}",
+                        error
+                    )
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Playback error: ${error.errorCodeName}\n${error.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    binding.nowPlaying.text = "Playback error: ${error.errorCodeName}"
+                }
+            })
+
+            pendingSong?.let {
+                pendingSong = null
+                playNow(it)
+            }
+        }, ContextCompat.getMainExecutor(this))
     }
 
     private fun isDebuggable(): Boolean =
@@ -112,14 +164,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     binding.emptyText.setText(getString(R.string.found_count, results.size))
                 }
-                binding.recycler.post {
-                    DebugLog.log(
-                        "layout: emptyText h=${binding.emptyText.height} " +
-                            "recycler h=${binding.recycler.height} w=${binding.recycler.width} " +
-                            "children=${binding.recycler.childCount} items=${adapter.itemCount} " +
-                            "player h=${binding.playerView.height}"
-                    )
-                }
             } catch (e: TimeoutCancellationException) {
                 DebugLog.logException("Search TIMEOUT for '$query'", e)
                 binding.emptyText.setText(R.string.search_timeout)
@@ -134,23 +178,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun playSong(song: SongResult) {
         DebugLog.log("Play requested: ${song.title} :: ${song.url}")
+        if (mediaController != null) {
+            playNow(song)
+        } else {
+            pendingSong = song
+        }
+    }
+
+    private fun playNow(song: SongResult) {
         lifecycleScope.launch {
             try {
                 binding.nowPlaying.text = getString(R.string.loading_stream)
                 val info = withTimeout(60_000) { YouTubeApi.resolveStreamInfo(song.url) }
                 val stream = YouTubeApi.pickAudioStream(info)
-                if (stream == null) {
-                    DebugLog.log("No audio stream for '${song.title}'")
-                    Toast.makeText(
-                        this@MainActivity,
-                        "No playable audio stream found",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    binding.nowPlaying.text = info.name
-                    return@launch
-                }
-                val streamUrl = stream.url ?: run {
-                    DebugLog.log("Stream has no URL for '${song.title}'")
+                val streamUrl = stream?.url ?: run {
+                    DebugLog.log("No playable audio stream for '${song.title}'")
                     Toast.makeText(
                         this@MainActivity,
                         "No playable audio stream found",
@@ -161,9 +203,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 DebugLog.log("Playing '${info.name}' stream: $streamUrl")
                 binding.nowPlaying.text = info.name
-                player?.setMediaItem(MediaItem.fromUri(streamUrl))
-                player?.prepare()
-                player?.playWhenReady = true
+                val mediaItem = PlaybackService.buildMediaItem(
+                    streamUrl,
+                    info.name,
+                    info.uploaderName ?: ""
+                )
+                mediaController?.setMediaItem(mediaItem)
+                mediaController?.prepare()
+                mediaController?.playWhenReady = true
             } catch (e: TimeoutCancellationException) {
                 DebugLog.logException("Stream resolve TIMEOUT for '${song.title}'", e)
                 binding.nowPlaying.text = getString(R.string.stream_timeout)
@@ -178,44 +225,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupPlayer() {
-        val dataSourceFactory = OkHttpDataSource.Factory(DownloaderProvider.okHttpClient())
-            .setDefaultRequestProperties(mapOf("Referer" to "https://www.youtube.com/"))
-
-        player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(this).setDataSourceFactory(dataSourceFactory)
-            )
-            .build()
-
-        binding.playerView.player = player
-        binding.playerView.setShowNextButton(false)
-        binding.playerView.setShowPreviousButton(false)
-
-        player?.addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                DebugLog.logException(
-                    "PLAYBACK ERROR code=${error.errorCodeName} msg=${error.message}",
-                    error
-                )
-                Toast.makeText(
-                    this@MainActivity,
-                    "Playback error: ${error.errorCodeName}\n${error.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                binding.nowPlaying.text = "Playback error: ${error.errorCodeName}"
-            }
-        })
-    }
-
     override fun onStop() {
         super.onStop()
-        player?.pause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        player?.release()
-        player = null
+        binding.playerView.player = null
+        mediaController?.release()
+        mediaController = null
     }
 }

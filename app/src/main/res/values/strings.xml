@@ -8,6 +8,7 @@
     <string name="search_timeout">Search timed out. Try again.</string>
     <string name="loading_stream">Loading stream info…</string>
     <string name="stream_timeout">Stream info timed out. Try another song.</string>
+    <string name="notification_channel">Playback</string>
     <string name="search">Search</string>
     <string name="no_results">No results found. Try a different search or check your internet connection.</string>
 </resources>

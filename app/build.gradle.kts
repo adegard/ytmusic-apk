@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.ytmusics"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
     }
 
     buildTypes {
@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
+    implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
 
     implementation("io.coil-kt:coil:2.7.0")
