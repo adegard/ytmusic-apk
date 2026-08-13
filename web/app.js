@@ -9,8 +9,8 @@
 //            search but YouTube blocks it for the player API.
 // - Playback: a hidden YouTube embed iframe + IFrame API. No stream URL, no
 //            CORS, no proxy needed — YouTube's own player handles signatures.
-//            This also keeps background audio working when added to the home
-//            screen on iOS.
+//            The iframe is kept 1px and on-screen (not opacity:0) so mobile
+//            browsers still consider it visible and allow autoplay.
 // ---------------------------------------------------------------------------
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
@@ -31,6 +31,8 @@ const iconPlay = document.getElementById("icon-play");
 
 let current = null;
 let ytPlayer = null;
+let pendingVideoId = null;
+let startCheckTimer = null;
 
 // --- proxy helper (search only) -------------------------------------------
 
@@ -55,15 +57,20 @@ async function doSearch(query) {
 
 function loadPlayerAPI() {
   if (window.YT && window.YT.Player) {
-    window.onYouTubeIframeAPIReady && window.onYouTubeIframeAPIReady();
+    createPlayer();
     return;
   }
+  if (document.getElementById("yt-iframe-api")) return;
   const tag = document.createElement("script");
+  tag.id = "yt-iframe-api";
   tag.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(tag);
 }
 
-window.onYouTubeIframeAPIReady = function () {
+window.onYouTubeIframeAPIReady = createPlayer;
+
+function createPlayer() {
+  if (ytPlayer) return;
   ytPlayer = new YT.Player("yt-embed", {
     height: "1",
     width: "1",
@@ -77,12 +84,22 @@ window.onYouTubeIframeAPIReady = function () {
       iv_load_policy: 3,
     },
     events: {
-      onReady: function () {},
+      onReady: onPlayerReady,
       onStateChange: onPlayerState,
       onError: onPlayerError,
     },
   });
-};
+}
+
+function onPlayerReady() {
+  if (pendingVideoId) {
+    const id = pendingVideoId;
+    pendingVideoId = null;
+    ytPlayer.loadVideoById(id);
+    ytPlayer.playVideo();
+    scheduleStartCheck();
+  }
+}
 
 function onPlayerState(event) {
   if (!current) return;
@@ -113,6 +130,18 @@ function updatePositionState() {
       position: ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0,
     });
   } catch (e) { /* unsupported */ }
+}
+
+// If autoplay was blocked by the browser, prompt the user to tap play.
+function scheduleStartCheck() {
+  clearTimeout(startCheckTimer);
+  startCheckTimer = setTimeout(function () {
+    if (!current || !ytPlayer || !ytPlayer.getPlayerState) return;
+    const state = ytPlayer.getPlayerState();
+    if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) return;
+    playerSub.textContent = "Tap play to start";
+    setIcon("play");
+  }, 2500);
 }
 
 // --- rendering -------------------------------------------------------------
@@ -184,6 +213,9 @@ function play(result) {
   if (ytPlayer && ytPlayer.loadVideoById) {
     ytPlayer.loadVideoById(result.id);
     ytPlayer.playVideo();
+    scheduleStartCheck();
+  } else {
+    pendingVideoId = result.id;
   }
 }
 

@@ -142,14 +142,14 @@ header h1 {
 }
 
 .embed-wrap {
-  position: absolute;
-  left: -9999px;
+  position: fixed;
+  left: 0;
   top: 0;
   width: 1px;
   height: 1px;
-  opacity: 0;
   overflow: hidden;
   pointer-events: none;
+  z-index: -1;
 }
 
 .player {
