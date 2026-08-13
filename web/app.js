@@ -15,6 +15,8 @@
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
+const APP_VERSION = "1.3.0";
+
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
 const form = document.getElementById("search-form");
@@ -29,6 +31,15 @@ const playerNextEl = document.getElementById("player-next");
 const toggle = document.getElementById("toggle");
 const iconPause = document.getElementById("icon-pause");
 const iconPlay = document.getElementById("icon-play");
+const versionEl = document.getElementById("version");
+const favOpen = document.getElementById("fav-open");
+const favClose = document.getElementById("fav-close");
+const favBackdrop = document.getElementById("fav-backdrop");
+const favModal = document.getElementById("fav-modal");
+const favListEl = document.getElementById("fav-list");
+const favToggle = document.getElementById("fav-toggle");
+const heartOutline = document.getElementById("heart-outline");
+const heartFilled = document.getElementById("heart-filled");
 
 let current = null;
 let ytPlayer = null;
@@ -38,6 +49,7 @@ let queue = [];
 let adMuted = false;
 let adCheckTimer = null;
 let stallCount = 0;
+let favorites = [];
 const playedIds = new Set();
 
 // --- proxy helper (search only) -------------------------------------------
@@ -309,6 +321,7 @@ function startSong(result) {
   playerEl.hidden = false;
   setIcon("play");
   setMediaSession(result);
+  updateFavHeart();
 
   if (ytPlayer && ytPlayer.loadVideoById) {
     try { ytPlayer.mute(); } catch (e) { /* ignore */ }
@@ -400,6 +413,110 @@ function setMediaSession(result) {
   }
 }
 
+// --- favorites -------------------------------------------------------------
+
+function loadFavorites() {
+  try {
+    favorites = JSON.parse(localStorage.getItem("ytmusic:favorites") || "[]") || [];
+  } catch (e) {
+    favorites = [];
+  }
+}
+
+function saveFavorites() {
+  try {
+    localStorage.setItem("ytmusic:favorites", JSON.stringify(favorites));
+  } catch (e) { /* storage full/unavailable */ }
+}
+
+function isFavorite(id) {
+  return favorites.some(function (f) { return f.id === id; });
+}
+
+function updateFavHeart() {
+  const has = current && isFavorite(current.id);
+  heartOutline.style.display = has ? "none" : "block";
+  heartFilled.style.display = has ? "block" : "none";
+  favToggle.classList.toggle("favorited", !!has);
+  favToggle.disabled = !current;
+}
+
+function toggleFavorite() {
+  if (!current) return;
+  const idx = favorites.findIndex(function (f) { return f.id === current.id; });
+  if (idx >= 0) {
+    favorites.splice(idx, 1);
+  } else {
+    favorites.unshift({
+      id: current.id,
+      title: current.title,
+      channel: current.channel || "",
+    });
+  }
+  saveFavorites();
+  updateFavHeart();
+  if (!favModal.hidden) renderFavorites();
+}
+
+function renderFavorites() {
+  favListEl.textContent = "";
+  if (!favorites.length) {
+    const p = document.createElement("div");
+    p.className = "fav-empty";
+    p.textContent = "No favorites yet — tap the heart on a song.";
+    favListEl.appendChild(p);
+    return;
+  }
+  for (const f of favorites) {
+    const row = document.createElement("div");
+    row.className = "fav-item";
+
+    const info = document.createElement("button");
+    info.type = "button";
+    info.className = "fav-play";
+    const t = document.createElement("div");
+    t.className = "fav-title";
+    t.textContent = f.title;
+    const c = document.createElement("div");
+    c.className = "fav-channel";
+    c.textContent = f.channel || "";
+    info.appendChild(t);
+    info.appendChild(c);
+    info.addEventListener("click", function () {
+      closeFavorites();
+      play({ id: f.id, title: f.title, channel: f.channel });
+    });
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "fav-del";
+    del.setAttribute("aria-label", "Remove from favorites");
+    del.textContent = "✕";
+    del.addEventListener("click", function () {
+      const i = favorites.findIndex(function (x) { return x.id === f.id; });
+      if (i >= 0) {
+        favorites.splice(i, 1);
+        saveFavorites();
+        renderFavorites();
+        updateFavHeart();
+      }
+    });
+
+    row.appendChild(info);
+    row.appendChild(del);
+    favListEl.appendChild(row);
+  }
+}
+
+function openFavorites() {
+  renderFavorites();
+  favModal.hidden = false;
+}
+
+function closeFavorites() {
+  favModal.hidden = true;
+}
+
 // --- wiring ----------------------------------------------------------------
 
 form.addEventListener("submit", async function (e) {
@@ -424,6 +541,16 @@ form.addEventListener("submit", async function (e) {
 });
 
 toggle.addEventListener("click", togglePlayPause);
+favToggle.addEventListener("click", toggleFavorite);
+favOpen.addEventListener("click", openFavorites);
+favClose.addEventListener("click", closeFavorites);
+favBackdrop.addEventListener("click", closeFavorites);
+
+versionEl.textContent = "v" + APP_VERSION;
+document.title = "YT Music v" + APP_VERSION;
+
+loadFavorites();
+updateFavHeart();
 
 loadPlayerAPI();
 
