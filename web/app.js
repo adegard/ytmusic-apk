@@ -37,6 +37,9 @@ let startCheckTimer = null;
 let queue = [];
 let adMuted = false;
 let adCheckTimer = null;
+let stallCount = 0;
+let preRollSkips = 0;
+let videoStartedAt = 0;
 const playedIds = new Set();
 
 // --- proxy helper (search only) -------------------------------------------
@@ -99,8 +102,13 @@ function createPlayer() {
 
 // --- ad handling -----------------------------------------------------------
 // The IFrame API gives no ad events, but during an ad getVideoData() returns
-// title "Advertisement". Poll for it and mute the player so ads are silent;
-// unmute as soon as real content plays again.
+// { video_id: "", title: "Advertisement" }. Poll for it and mute the player so
+// ads are silent; unmute as soon as real content plays again.
+//
+// A pre-roll ad that fails to start is the most common cause of the player
+// hanging on "Loading…", so if an ad starts right after we began a song we
+// reload the video (up to twice) — usually YouTube then starts the content
+// directly.
 function startAdCheck() {
   if (adCheckTimer) return;
   adCheckTimer = setInterval(checkAd, 500);
@@ -115,17 +123,32 @@ function stopAdCheck() {
 
 function checkAd() {
   if (!ytPlayer || !ytPlayer.getVideoData) return;
-  let title = "";
+  let vd = null;
   try {
-    const vd = ytPlayer.getVideoData();
-    title = (vd && vd.title) || "";
+    vd = ytPlayer.getVideoData();
   } catch (e) { return; }
-  const isAd = title === "Advertisement" || title === "Video advertising" || /^ad[^a-z]/i.test(title);
-  if (isAd && !adMuted) {
-    adMuted = true;
-    try { ytPlayer.mute(); } catch (e) { /* ignore */ }
+  const isAd = !!vd &&
+    vd.video_id === "" &&
+    (vd.title === "Advertisement" || vd.title === "Video advertising");
+
+  if (isAd) {
+    if (!adMuted) {
+      adMuted = true;
+      try { ytPlayer.mute(); } catch (e) { /* ignore */ }
+    }
+    // Pre-roll skip: reload shortly after the song started.
+    if (preRollSkips < 2 && current && Date.now() - videoStartedAt < 15000) {
+      preRollSkips++;
+      playerSub.textContent = "Skipping ad…";
+      try {
+        ytPlayer.loadVideoById(current.id);
+        ytPlayer.playVideo();
+        scheduleStartCheck();
+      } catch (e) { /* ignore */ }
+      return;
+    }
     playerSub.textContent = "Ad playing (muted)…";
-  } else if (!isAd && adMuted) {
+  } else if (adMuted) {
     adMuted = false;
     try { ytPlayer.unMute(); } catch (e) { /* ignore */ }
     if (current) playerSub.textContent = current.channel;
@@ -142,8 +165,9 @@ function onPlayerReady() {
 function onPlayerState(event) {
   if (!current) return;
   if (event.data === YT.PlayerState.PLAYING) {
+    stallCount = 0;
     setIcon("pause");
-    playerSub.textContent = current.channel;
+    if (!adMuted) playerSub.textContent = current.channel;
     updatePositionState();
   } else if (
     event.data === YT.PlayerState.PAUSED ||
@@ -171,16 +195,49 @@ function updatePositionState() {
   } catch (e) { /* unsupported */ }
 }
 
-// If autoplay was blocked by the browser, prompt the user to tap play.
+// Stall watchdog: a stuck BUFFERING/UNSTARTED embed (often a failed pre-roll ad)
+// otherwise shows "Loading…" forever. Nudge playback a few times, then surface
+// a retry message.
 function scheduleStartCheck() {
   clearTimeout(startCheckTimer);
-  startCheckTimer = setTimeout(function () {
-    if (!current || !ytPlayer || !ytPlayer.getPlayerState) return;
-    const state = ytPlayer.getPlayerState();
-    if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) return;
+  startCheckTimer = setTimeout(checkStalled, 6000);
+}
+
+function checkStalled() {
+  if (!current || !ytPlayer || !ytPlayer.getPlayerState) return;
+  let state = -1;
+  try { state = ytPlayer.getPlayerState(); } catch (e) { /* ignore */ }
+
+  if (state === YT.PlayerState.PLAYING) {
+    stallCount = 0;
+    return;
+  }
+  if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
+    stallCount = 0;
     playerSub.textContent = "Tap play to start";
     setIcon("play");
-  }, 2500);
+    return;
+  }
+
+  // During an ad the player often reports BUFFERING while the (muted) ad plays.
+  let vd = null;
+  try { vd = ytPlayer.getVideoData(); } catch (e) { /* ignore */ }
+  if (vd && vd.video_id === "" && (vd.title === "Advertisement" || vd.title === "Video advertising")) {
+    return;
+  }
+
+  stallCount++;
+  if (stallCount >= 3) {
+    stallCount = 0;
+    playerSub.textContent = "Stalled — tap play to retry";
+    setIcon("play");
+    showStatus("Playback stalled (state " + state + "). Press play or tap the song again.");
+    return;
+  }
+
+  playerSub.textContent = "Still loading…";
+  try { ytPlayer.playVideo(); } catch (e) { /* ignore */ }
+  scheduleStartCheck();
 }
 
 // --- rendering -------------------------------------------------------------
@@ -252,6 +309,9 @@ function startSong(result) {
   current = result;
   playedIds.add(result.id);
   if (playedIds.size > 100) playedIds.clear();
+  stallCount = 0;
+  preRollSkips = 0;
+  videoStartedAt = Date.now();
   playerTitle.textContent = result.title;
   playerSub.textContent = "Loading…";
   playerNextEl.textContent = "";
