@@ -31,10 +31,6 @@ Get the latest APK from the **[Releases](https://github.com/adegard/ytmusic-apk/
 
 An iOS companion app (same on-device, no-login approach) lives in the [`ios/`](ios/README.md) folder.
 
-## Web app (PWA)
-
-No install needed: a browser app that runs on iPhone and Android lives in [`web/`](web/README.md) — installable to the home screen, background audio included. It needs a free Cloudflare Worker proxy (see its README).
-
 ## License
 
 MIT
