@@ -15,7 +15,7 @@
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.2";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
@@ -205,8 +205,9 @@ function updatePositionState() {
 }
 
 // Stall watchdog: a stuck BUFFERING/UNSTARTED embed (often a failed pre-roll ad)
-// otherwise shows "Loading…" forever. Nudge playback a few times, then surface
-// a retry message.
+// otherwise shows "Loading…" forever. Nudge playback, escalate to a fresh
+// loadVideoById (that is what makes a manual retap work), then surface a retry
+// message only after several recovery attempts have failed.
 function scheduleStartCheck() {
   clearTimeout(startCheckTimer);
   startCheckTimer = setTimeout(checkStalled, 6000);
@@ -236,7 +237,7 @@ function checkStalled() {
   }
 
   stallCount++;
-  if (stallCount >= 3) {
+  if (stallCount >= 5) {
     stallCount = 0;
     playerSub.textContent = "Stalled — tap play to retry";
     setIcon("play");
@@ -244,8 +245,13 @@ function checkStalled() {
     return;
   }
 
+  try {
+    if (stallCount >= 2) {
+      ytPlayer.loadVideoById(current.id);
+    }
+    ytPlayer.playVideo();
+  } catch (e) { /* ignore */ }
   playerSub.textContent = "Still loading…";
-  try { ytPlayer.playVideo(); } catch (e) { /* ignore */ }
   scheduleStartCheck();
 }
 
