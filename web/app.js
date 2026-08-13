@@ -35,6 +35,8 @@ let ytPlayer = null;
 let pendingVideoId = null;
 let startCheckTimer = null;
 let queue = [];
+let adMuted = false;
+let adCheckTimer = null;
 const playedIds = new Set();
 
 // --- proxy helper (search only) -------------------------------------------
@@ -92,6 +94,42 @@ function createPlayer() {
       onError: onPlayerError,
     },
   });
+  startAdCheck();
+}
+
+// --- ad handling -----------------------------------------------------------
+// The IFrame API gives no ad events, but during an ad getVideoData() returns
+// title "Advertisement". Poll for it and mute the player so ads are silent;
+// unmute as soon as real content plays again.
+function startAdCheck() {
+  if (adCheckTimer) return;
+  adCheckTimer = setInterval(checkAd, 500);
+}
+
+function stopAdCheck() {
+  if (adCheckTimer) {
+    clearInterval(adCheckTimer);
+    adCheckTimer = null;
+  }
+}
+
+function checkAd() {
+  if (!ytPlayer || !ytPlayer.getVideoData) return;
+  let title = "";
+  try {
+    const vd = ytPlayer.getVideoData();
+    title = (vd && vd.title) || "";
+  } catch (e) { return; }
+  const isAd = title === "Advertisement" || title === "Video advertising" || /^ad[^a-z]/i.test(title);
+  if (isAd && !adMuted) {
+    adMuted = true;
+    try { ytPlayer.mute(); } catch (e) { /* ignore */ }
+    playerSub.textContent = "Ad playing (muted)…";
+  } else if (!isAd && adMuted) {
+    adMuted = false;
+    try { ytPlayer.unMute(); } catch (e) { /* ignore */ }
+    if (current) playerSub.textContent = current.channel;
+  }
 }
 
 function onPlayerReady() {
@@ -259,7 +297,11 @@ async function fetchSuggestions(videoId) {
     const suggestions = data.suggestions || [];
     if (!suggestions.length) return;
     if (!current || current.id !== videoId) return;
-    const fresh = suggestions.filter(function (s) {
+    // Skip YouTube-promoted mix/live radio items when regular songs exist;
+    // fall back to live items only if everything is live.
+    const regular = suggestions.filter(function (s) { return !s.live; });
+    const pool = regular.length ? regular : suggestions.filter(function (s) { return s.live; });
+    const fresh = pool.filter(function (s) {
       return !playedIds.has(s.id) && !queue.some(function (q) { return q.id === s.id; });
     });
     if (!fresh.length) return;

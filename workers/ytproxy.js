@@ -179,22 +179,26 @@ async function nextSuggestions(videoId) {
         if (!id) continue;
 
         let channel = "";
+        let live = false;
         try {
           const rows =
             (lmv.metadata && lmv.metadata.contentMetadataViewModel && lmv.metadata.contentMetadataViewModel.metadataRows) || [];
+          const metaTexts = [];
           for (const row of rows) {
             for (const part of row.metadataParts || []) {
               const text = part && part.text && part.text.content;
-              if (typeof text === "string" && text.indexOf("\u00B7") >= 0) {
-                channel = text.split("\u00B7")[0].trim();
-                break;
-              }
+              if (typeof text === "string") metaTexts.push(text);
             }
-            if (channel) break;
+          }
+          for (const t of metaTexts) {
+            if (!channel && t.indexOf("\u00B7") >= 0) {
+              channel = t.split("\u00B7")[0].trim();
+            }
+            if (/streamed|live/i.test(t)) live = true;
           }
         } catch (err) { /* optional field */ }
 
-        out.push({ id: id, title: title, channel: channel });
+        out.push({ id: id, title: title, channel: channel, live: live });
         if (out.length >= 20) return out;
       }
     }
