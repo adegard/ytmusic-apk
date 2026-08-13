@@ -3,23 +3,20 @@
 // ---------------------------------------------------------------------------
 // YT Music PWA
 //
-// Search + streaming logic runs entirely in your browser. YouTube does not
-// send CORS headers, so both calls below go through a tiny Cloudflare Worker
-// proxy (free, ~30 lines). Deploy it, then set PROXY to your worker URL.
-//
-//   workers/ytproxy.js  ->  https://<your-worker-subdomain>.workers.dev/
-//
-// If PROXY is left empty, the app still works when opened from a device that
-// can make CORS-free requests (e.g. a local host) or you point it at any
-// CORS proxy that accepts "?url=<encoded target>".
+// - Search:  proxied GET of the YouTube results page, parsed for ytInitialData.
+//            YouTube sends no CORS headers, so this goes through the Cloudflare
+//            Worker proxy (workers/ytproxy.js). The worker IP is allowed for
+//            search but YouTube blocks it for the player API.
+// - Playback: a hidden YouTube embed iframe + IFrame API. No stream URL, no
+//            CORS, no proxy needed — YouTube's own player handles signatures.
+//            This also keeps background audio working when added to the home
+//            screen on iOS.
 // ---------------------------------------------------------------------------
 
-const PROXY = ""; // e.g. "https://ytmusic-proxy.example.workers.dev/"
+const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
-const PLAYER_ENDPOINT = "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
-const audio = document.getElementById("audio");
 const form = document.getElementById("search-form");
 const input = document.getElementById("search-input");
 const button = document.getElementById("search-button");
@@ -33,37 +30,20 @@ const iconPause = document.getElementById("icon-pause");
 const iconPlay = document.getElementById("icon-play");
 
 let current = null;
+let ytPlayer = null;
 
-// --- proxy helpers ---------------------------------------------------------
-
-function proxyUrl(target) {
-  return PROXY + "?url=" + encodeURIComponent(target);
-}
-
-async function proxiedGet(target) {
-  const res = await fetch(proxyUrl(target), { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error("Proxy returned HTTP " + res.status);
-  return res.text();
-}
-
-async function proxiedPost(target, body) {
-  const res = await fetch(proxyUrl(target), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": UA },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error("Proxy returned HTTP " + res.status);
-  return res.json();
-}
-
-// --- search ----------------------------------------------------------------
+// --- proxy helper (search only) -------------------------------------------
 
 async function doSearch(query) {
   const target =
     "https://www.youtube.com/results?search_query=" +
     encodeURIComponent(query) +
     "&hl=en";
-  const html = await proxiedGet(target);
+  const res = await fetch(PROXY + "?url=" + encodeURIComponent(target), {
+    headers: { "User-Agent": UA },
+  });
+  if (!res.ok) throw new Error("Proxy returned HTTP " + res.status);
+  const html = await res.text();
   const results = YT.parseSearch(html);
   if (!results.length) {
     throw new Error("No results — YouTube may have blocked this request. Try again shortly.");
@@ -71,20 +51,68 @@ async function doSearch(query) {
   return results;
 }
 
-async function resolveStream(videoId) {
-  const player = await proxiedPost(PLAYER_ENDPOINT, {
-    context: {
-      client: { clientName: "ANDROID", clientVersion: "20.20.35", androidSdkVersion: 34 },
-    },
-    videoId: videoId,
-  });
-  const stream = YT.pickStream(player);
-  if (!stream) {
-    const status = (player && player.playabilityStatus) || {};
-    const reason = status.reason || status.status || "unknown";
-    throw new Error("Video unavailable: " + reason);
+// --- YouTube IFrame API ----------------------------------------------------
+
+function loadPlayerAPI() {
+  if (window.YT && window.YT.Player) {
+    window.onYouTubeIframeAPIReady && window.onYouTubeIframeAPIReady();
+    return;
   }
-  return stream;
+  const tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+}
+
+window.onYouTubeIframeAPIReady = function () {
+  ytPlayer = new YT.Player("yt-embed", {
+    height: "1",
+    width: "1",
+    playerVars: {
+      autoplay: 0,
+      playsinline: 1,
+      rel: 0,
+      controls: 0,
+      fs: 0,
+      disablekb: 1,
+      iv_load_policy: 3,
+    },
+    events: {
+      onReady: function () {},
+      onStateChange: onPlayerState,
+      onError: onPlayerError,
+    },
+  });
+};
+
+function onPlayerState(event) {
+  if (!current) return;
+  if (event.data === YT.PlayerState.PLAYING) {
+    setIcon("pause");
+    playerSub.textContent = current.channel;
+    updatePositionState();
+  } else if (
+    event.data === YT.PlayerState.PAUSED ||
+    event.data === YT.PlayerState.ENDED
+  ) {
+    setIcon("play");
+  }
+}
+
+function onPlayerError() {
+  if (!current) return;
+  setIcon("play");
+  showStatus("This video can't be played here (maybe embedding is disabled).");
+}
+
+function updatePositionState() {
+  if (!navigator.mediaSession || !ytPlayer || !ytPlayer.getDuration) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: ytPlayer.getDuration() || 0,
+      playbackRate: 1.0,
+      position: ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0,
+    });
+  } catch (e) { /* unsupported */ }
 }
 
 // --- rendering -------------------------------------------------------------
@@ -136,7 +164,7 @@ function renderResults(results) {
     item.appendChild(dur);
 
     item.addEventListener("click", function () {
-      play(r);
+      play(result);
     });
     resultsEl.appendChild(item);
   }
@@ -144,33 +172,27 @@ function renderResults(results) {
 
 // --- playback --------------------------------------------------------------
 
-async function play(result) {
+function play(result) {
   hideStatus();
+  current = result;
   playerTitle.textContent = result.title;
   playerSub.textContent = "Loading…";
   playerEl.hidden = false;
   setIcon("play");
-  current = result;
-  try {
-    const stream = await resolveStream(result.id);
-    setMediaSession(stream, result);
-    playerSub.textContent = stream.author;
-    audio.src = stream.url;
-    await audio.play();
-    setIcon("pause");
-  } catch (err) {
-    showStatus(err.message || String(err));
-    setIcon("play");
+  setMediaSession(result);
+
+  if (ytPlayer && ytPlayer.loadVideoById) {
+    ytPlayer.loadVideoById(result.id);
+    ytPlayer.playVideo();
   }
 }
 
 function togglePlayPause() {
-  if (audio.paused) {
-    audio.play();
-    setIcon("pause");
+  if (!ytPlayer || !ytPlayer.getPlayerState) return;
+  if (ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+    ytPlayer.pauseVideo();
   } else {
-    audio.pause();
-    setIcon("play");
+    ytPlayer.playVideo();
   }
 }
 
@@ -179,19 +201,19 @@ function setIcon(which) {
   iconPause.style.display = which === "pause" ? "block" : "none";
 }
 
-function setMediaSession(stream, result) {
+function setMediaSession(result) {
   if (!("mediaSession" in navigator)) return;
   navigator.mediaSession.metadata = new MediaMetadata({
-    title: stream.title || result.title,
-    artist: stream.author || result.channel,
+    title: result.title,
+    artist: result.channel,
     album: "YT Music",
     artwork: [
       { src: "https://i.ytimg.com/vi/" + result.id + "/hqdefault.jpg", sizes: "480x360", type: "image/jpeg" },
     ],
   });
   const actions = {
-    play: function () { audio.play(); },
-    pause: function () { audio.pause(); },
+    play: function () { ytPlayer && ytPlayer.playVideo && ytPlayer.playVideo(); },
+    pause: function () { ytPlayer && ytPlayer.pauseVideo && ytPlayer.pauseVideo(); },
     toggleplaypause: togglePlayPause,
   };
   for (const key in actions) {
@@ -199,25 +221,9 @@ function setMediaSession(stream, result) {
       navigator.mediaSession.setActionHandler(key, actions[key]);
     } catch (e) { /* unsupported action */ }
   }
-  if (stream.duration) {
-    try {
-      navigator.mediaSession.setPositionState({
-        duration: stream.duration,
-        playbackRate: 1.0,
-        position: 0,
-      });
-    } catch (e) { /* unsupported */ }
-  }
 }
 
 // --- wiring ----------------------------------------------------------------
-
-audio.addEventListener("pause", function () { setIcon("play"); });
-audio.addEventListener("play", function () { setIcon("pause"); });
-audio.addEventListener("error", function () {
-  if (current) showStatus("Playback failed. Try another video or wait and retry.");
-  setIcon("play");
-});
 
 form.addEventListener("submit", async function (e) {
   e.preventDefault();
@@ -241,6 +247,8 @@ form.addEventListener("submit", async function (e) {
 });
 
 toggle.addEventListener("click", togglePlayPause);
+
+loadPlayerAPI();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(function () {});

@@ -141,6 +141,17 @@ header h1 {
   margin-top: 40px;
 }
 
+.embed-wrap {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .player {
   position: fixed;
   left: 0;

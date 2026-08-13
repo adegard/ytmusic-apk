@@ -1,21 +1,25 @@
 # YT Music (Web / PWA)
 
-A browser app that searches YouTube and streams songs on-device. Runs on iPhone
+A browser app that searches YouTube and plays songs on-device. Runs on iPhone
 (Safari) and Android, installable to the home screen — no App Store, no Mac, no
 signing.
 
-- **Search** — the results page is parsed for `ytInitialData`.
-- **Streams** — the InnerTube `/player` API (anonymous `ANDROID` client) returns
-  already-signed googlevideo URLs; the best AAC (`audio/mp4`) stream is picked
-  (iOS Safari cannot play WebM/Opus).
-- **Playback** — an `<audio>` element with the Media Session API for
-  lock-screen / Control-Center controls and background audio.
+## How it works
+
+- **Search** — a proxied GET of the YouTube results page, parsed for
+  `ytInitialData`.
+- **Playback** — a hidden YouTube embed iframe driven by the IFrame API.
+  YouTube's own player handles stream URLs and signatures, so no stream
+  endpoint is needed and background audio keeps working on iOS.
+- **Lock screen** — the Media Session API shows now-playing info and
+  play/pause controls in Control Center.
 
 ## Why a proxy
 
 YouTube's endpoints send no CORS headers, so a browser page cannot call them
-directly. All requests go through a tiny free Cloudflare Worker that just
-forwards them and adds CORS headers.
+directly. Search goes through a tiny free Cloudflare Worker that just forwards
+the request and adds CORS headers. (The player API is blocked for the worker's
+datacenter IP, which is why playback uses the embed player instead.)
 
 ## Setup
 
@@ -25,7 +29,7 @@ forwards them and adds CORS headers.
 2. Dashboard → **Workers & Pages** → **Create** → **Create Worker**.
 3. Replace the code with the contents of [`workers/ytproxy.js`](../workers/ytproxy.js)
    → **Deploy**.
-4. Note your worker URL, e.g. `https://ytmusic-proxy.yourname.workers.dev`.
+4. Enable **Workers.dev** for the worker (Settings → Domains & Routes).
 
 ### 2. Point the app at it
 
@@ -52,7 +56,7 @@ by a tap.
 
 ## Known limitations
 
-- Anonymous streaming can be rate-limited or temporarily blocked by YouTube.
-- Videos with no AAC audio track are skipped (WebM/Opus unsupported by Safari).
+- Search can be rate-limited or temporarily blocked by YouTube.
+- Videos that disallow embedding can't be played.
 - The proxy is required unless the app is served somewhere without CORS
   restrictions; leaving `PROXY` empty is only useful for local testing.

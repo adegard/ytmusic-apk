@@ -8,6 +8,9 @@
 //
 // Deploy: Cloudflare dashboard -> Workers & Pages -> Create -> Worker ->
 // paste this file -> Deploy. Then set PROXY in web/app.js to your worker URL.
+//
+// Classic (service worker) format on purpose — it deploys cleanly via the
+// dashboard and the Workers API without module metadata.
 
 const DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
@@ -18,50 +21,60 @@ const CORS = {
   "access-control-expose-headers": "*",
 };
 
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
+addEventListener("fetch", (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
 
-    // Browser preflight for the POST request.
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS });
-    }
+  // Browser preflight for the POST request.
+  if (request.method === "OPTIONS") {
+    event.respondWith(new Response(null, { status: 204, headers: CORS }));
+    return;
+  }
 
-    const target = url.searchParams.get("url");
-    if (!target) {
-      return new Response("Missing ?url= parameter", { status: 400, headers: CORS });
-    }
-    let targetUrl;
-    try {
-      targetUrl = new URL(target);
-    } catch {
-      return new Response("Invalid target URL", { status: 400, headers: CORS });
-    }
-    if (targetUrl.hostname !== "www.youtube.com" && targetUrl.hostname !== "youtube.com") {
-      return new Response("Only youtube.com targets are allowed", { status: 403, headers: CORS });
-    }
+  const target = url.searchParams.get("url");
+  if (!target) {
+    event.respondWith(new Response("Missing ?url= parameter", { status: 400, headers: CORS }));
+    return;
+  }
 
-    const headers = new Headers({
-      "User-Agent": DESKTOP_UA,
-      "Accept-Language": "en",
-    });
-    let body;
-    if (request.method === "GET" || request.method === "HEAD") {
-      body = undefined;
-    } else {
-      headers.set("Content-Type", "application/json");
-      body = await request.arrayBuffer();
-    }
+  let targetUrl;
+  try {
+    targetUrl = new URL(target);
+  } catch (err) {
+    event.respondWith(new Response("Invalid target URL", { status: 400, headers: CORS }));
+    return;
+  }
 
-    const upstream = await fetch(targetUrl, { method: request.method, headers, body });
-    const response = new Response(upstream.body, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers: upstream.headers,
-    });
-    for (const [key, value] of Object.entries(CORS)) {
-      response.headers.set(key, value);
-    }
-    return response;
-  },
-};
+  if (!["www.youtube.com", "youtube.com", "music.youtube.com"].includes(targetUrl.hostname)) {
+    event.respondWith(new Response("Only youtube.com targets are allowed", { status: 403, headers: CORS }));
+    return;
+  }
+
+  event.respondWith(proxy(targetUrl, request));
+});
+
+async function proxy(targetUrl, request) {
+  const headers = new Headers({
+    "User-Agent": DESKTOP_UA,
+    "Accept-Language": "en",
+  });
+
+  let body;
+  if (request.method === "GET" || request.method === "HEAD") {
+    body = undefined;
+  } else {
+    headers.set("Content-Type", "application/json");
+    body = await request.arrayBuffer();
+  }
+
+  const upstream = await fetch(targetUrl, { method: request.method, headers, body });
+  const response = new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: upstream.headers,
+  });
+  for (const [key, value] of Object.entries(CORS)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
