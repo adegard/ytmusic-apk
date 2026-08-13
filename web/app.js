@@ -15,7 +15,7 @@
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
-const APP_VERSION = "1.3.5";
+const APP_VERSION = "1.3.6";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
@@ -61,6 +61,7 @@ statusEl.hidden = true;
 let current = null;
 let ytPlayer = null;
 let pendingVideoId = null;
+let pendingPlayId = null;
 let startCheckTimer = null;
 let queue = [];
 let adMuted = false;
@@ -127,6 +128,10 @@ function createPlayer() {
       onError: onPlayerError,
     },
   });
+  try {
+    const f = ytPlayer.getIframe();
+    if (f) f.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+  } catch (e) { /* ignore */ }
   startAdCheck();
 }
 
@@ -151,20 +156,12 @@ function stopAdCheck() {
   }
 }
 
-// An ad is playing when the player's current "video" is not the requested song.
-// Classic pre-rolls report video_id:"" + title "Advertisement"; newer ad formats
-// report the ad's own real video_id/title, so we also treat ANY video_id that
-// differs from the requested song as an ad. (Transient mismatches during the
-// loadVideoById handover self-correct as soon as the real video reports in.)
+// An ad is playing when the player's current "video" is an ad. The IFrame API
+// gives no ad events; during a classic pre-roll/mid-roll getVideoData() returns
+// { video_id: "", title: "Advertisement" }.
 function isAdLike(vd) {
-  if (!vd) return false;
-  if (vd.video_id === "" && (vd.title === "Advertisement" || vd.title === "Video advertising")) {
-    return true;
-  }
-  if (current && vd.video_id && vd.video_id !== current.id) {
-    return true;
-  }
-  return false;
+  return !!(vd && vd.video_id === "" &&
+    (vd.title === "Advertisement" || vd.title === "Video advertising"));
 }
 
 function checkAd() {
@@ -191,7 +188,8 @@ function checkAd() {
       if (adSkipCount <= 3) {
         dbg("hung ad, reload to skip (#" + adSkipCount + ")");
         try {
-          ytPlayer.loadVideoById(current.id);
+          pendingPlayId = current.id;
+          ytPlayer.cueVideoById(current.id);
           ytPlayer.playVideo();
         } catch (e) { /* ignore */ }
       } else {
@@ -219,6 +217,11 @@ function onPlayerReady() {
 function onPlayerState(event) {
   if (!current) return;
   dbg("state -> " + (STATE_NAMES[event.data] || event.data));
+  if (event.data === YT.PlayerState.CUED && current && pendingPlayId === current.id) {
+    dbg("cued, starting playback");
+    pendingPlayId = null;
+    try { ytPlayer.playVideo(); } catch (e) { /* ignore */ }
+  }
   if (event.data === YT.PlayerState.PLAYING) {
     stallCount = 0;
     setIcon("pause");
@@ -328,7 +331,8 @@ function checkStalled() {
     if (stallCount >= 2) {
       dbg("unstarted, reload attempt #" + stallCount);
       try {
-        ytPlayer.loadVideoById(current.id);
+        pendingPlayId = current.id;
+        ytPlayer.cueVideoById(current.id);
         ytPlayer.playVideo();
       } catch (e) { /* ignore */ }
     }
@@ -427,11 +431,15 @@ function startSong(result) {
   setMediaSession(result);
   updateFavHeart();
 
-  if (ytPlayer && ytPlayer.loadVideoById) {
+  if (ytPlayer && ytPlayer.cueVideoById) {
     try { ytPlayer.mute(); } catch (e) { /* ignore */ }
     dbg("start " + result.id + " " + (result.title || "").slice(0, 30));
-    ytPlayer.loadVideoById(result.id);
-    ytPlayer.playVideo();
+    pendingPlayId = result.id;
+    // Cue first, then start playback once the video is actually loaded (see the
+    // CUED handler below). Calling playVideo() before the video is loaded is a
+    // silent no-op on some builds and leaves the player stuck in UNSTARTED.
+    ytPlayer.cueVideoById(result.id);
+    try { ytPlayer.playVideo(); } catch (e) { /* ignore */ }
     scheduleStartCheck();
   } else {
     pendingVideoId = result.id;
