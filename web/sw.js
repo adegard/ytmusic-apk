@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "ytmusic-v10";
+const CACHE = "ytmusic-v11";
 const SHELL = ["./", "./index.html", "./style.css", "./app.js", "./yt.js", "./icon.svg"];
 
 self.addEventListener("install", function (event) {
@@ -31,15 +31,18 @@ self.addEventListener("fetch", function (event) {
   const method = event.request.method;
 
   if (sameOrigin && method === "GET") {
+    // Network-first for the app shell: after a deploy the browser always gets
+    // the latest files when online (old versions otherwise linger in the cache
+    // and confuse users). The cache is the offline fallback.
     event.respondWith(
-      caches.match(event.request).then(function (cached) {
-        return cached || fetch(event.request).then(function (res) {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then(function (cache) { cache.put(event.request, copy); });
-          }
-          return res;
-        });
+      fetch(event.request).then(function (res) {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(function (cache) { cache.put(event.request, copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(event.request);
       })
     );
     return;
