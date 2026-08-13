@@ -15,7 +15,7 @@
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.3.3";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
@@ -40,6 +40,19 @@ const favListEl = document.getElementById("fav-list");
 const favToggle = document.getElementById("fav-toggle");
 const heartOutline = document.getElementById("heart-outline");
 const heartFilled = document.getElementById("heart-filled");
+const debugOpen = document.getElementById("debug-open");
+const debugPanel = document.getElementById("debug");
+const debugLogEl = document.getElementById("debug-log");
+
+const STATE_NAMES = { [-1]: "UNSTARTED", 0: "ENDED", 1: "PLAYING", 2: "PAUSED", 3: "BUFFERING", 5: "CUED" };
+const ERROR_NAMES = { 2: "invalid parameter", 5: "HTML5 player error", 100: "video not found", 101: "embedding disabled", 150: "embedding disabled" };
+
+function dbg(msg) {
+  if (!debugLogEl) return;
+  const t = new Date().toTimeString().slice(0, 8);
+  debugLogEl.textContent += "[" + t + "] " + msg + "\n";
+  debugPanel.scrollTop = debugPanel.scrollHeight;
+}
 
 favModal.hidden = true;
 playerEl.hidden = true;
@@ -149,17 +162,20 @@ function checkAd() {
   if (isAd) {
     if (!adMuted) {
       adMuted = true;
+      dbg("ad detected, muting");
       try { ytPlayer.mute(); } catch (e) { /* ignore */ }
       playerSub.textContent = "Ad playing (muted)…";
     }
   } else if (adMuted) {
     adMuted = false;
+    dbg("ad ended, unmuting");
     try { ytPlayer.unMute(); } catch (e) { /* ignore */ }
     if (current) playerSub.textContent = current.channel;
   }
 }
 
 function onPlayerReady() {
+  dbg("player ready");
   if (pendingVideoId) {
     pendingVideoId = null;
     if (current) startSong(current);
@@ -168,6 +184,7 @@ function onPlayerReady() {
 
 function onPlayerState(event) {
   if (!current) return;
+  dbg("state -> " + (STATE_NAMES[event.data] || event.data));
   if (event.data === YT.PlayerState.PLAYING) {
     stallCount = 0;
     setIcon("pause");
@@ -187,10 +204,12 @@ function onPlayerState(event) {
   }
 }
 
-function onPlayerError() {
+function onPlayerError(event) {
   if (!current) return;
+  const code = event && event.data;
+  dbg("onError " + code + " (" + (ERROR_NAMES[code] || "unknown") + ")");
   setIcon("play");
-  showStatus("This video can't be played here (maybe embedding is disabled).");
+  showStatus("This video can't be played here" + (ERROR_NAMES[code] ? " — " + ERROR_NAMES[code] : "") + ".");
 }
 
 function updatePositionState() {
@@ -205,12 +224,12 @@ function updatePositionState() {
 }
 
 // Stall watchdog: a stuck BUFFERING/UNSTARTED embed (often a failed pre-roll ad)
-// otherwise shows "Loading…" forever. Nudge playback, escalate to a fresh
-// loadVideoById (that is what makes a manual retap work), then surface a retry
-// message only after several recovery attempts have failed.
+// otherwise shows "Loading…" forever. Be PATIENT (slow mobile networks can take
+// a while to buffer): gentle playVideo nudges first, one fresh loadVideoById
+// (the equivalent of a manual retap) mid-way, and only give up after ~60s.
 function scheduleStartCheck() {
   clearTimeout(startCheckTimer);
-  startCheckTimer = setTimeout(checkStalled, 6000);
+  startCheckTimer = setTimeout(checkStalled, 8000);
 }
 
 function checkStalled() {
@@ -237,7 +256,8 @@ function checkStalled() {
   }
 
   stallCount++;
-  if (stallCount >= 5) {
+  dbg("stall check #" + stallCount + ": state=" + state + " videoId=" + (vd ? vd.video_id : "?"));
+  if (stallCount >= 8) {
     stallCount = 0;
     playerSub.textContent = "Stalled — tap play to retry";
     setIcon("play");
@@ -245,12 +265,16 @@ function checkStalled() {
     return;
   }
 
-  try {
-    if (stallCount >= 2) {
+  if (stallCount === 2 || stallCount === 3 || stallCount === 6 || stallCount === 7) {
+    try { ytPlayer.playVideo(); } catch (e) { /* ignore */ }
+  }
+  if (stallCount === 5) {
+    dbg("fresh reload");
+    try {
       ytPlayer.loadVideoById(current.id);
-    }
-    ytPlayer.playVideo();
-  } catch (e) { /* ignore */ }
+      ytPlayer.playVideo();
+    } catch (e) { /* ignore */ }
+  }
   playerSub.textContent = "Still loading…";
   scheduleStartCheck();
 }
@@ -335,6 +359,7 @@ function startSong(result) {
 
   if (ytPlayer && ytPlayer.loadVideoById) {
     try { ytPlayer.mute(); } catch (e) { /* ignore */ }
+    dbg("start " + result.id + " " + (result.title || "").slice(0, 30));
     ytPlayer.loadVideoById(result.id);
     ytPlayer.playVideo();
     scheduleStartCheck();
@@ -555,6 +580,10 @@ favToggle.addEventListener("click", toggleFavorite);
 favOpen.addEventListener("click", openFavorites);
 favClose.addEventListener("click", closeFavorites);
 favBackdrop.addEventListener("click", closeFavorites);
+debugOpen.addEventListener("click", function () {
+  debugPanel.hidden = !debugPanel.hidden;
+  if (!debugPanel.hidden) dbg("--- debug log opened ---");
+});
 
 versionEl.textContent = "v" + APP_VERSION;
 document.title = "YT Music v" + APP_VERSION;
