@@ -1,0 +1,28 @@
+name: YTMusic
+options:
+  bundleIdPrefix: com.adegard
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+targets:
+  YTMusic:
+    type: application
+    platform: iOS
+    sources:
+      - YTMusic
+    info:
+      path: YTMusic/Info.plist
+      properties:
+        CFBundleDisplayName: YT Music
+        UILaunchScreen: {}
+        UIBackgroundModes:
+          - audio
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInMedia: true
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic

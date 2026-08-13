@@ -1,0 +1,5 @@
+*.xcodeproj/
+YTMusic/Info.plist
+DerivedData/
+build/
+.DS_Store
