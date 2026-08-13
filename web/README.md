@@ -41,12 +41,13 @@ const PROXY = "https://ytmusic-proxy.yourname.workers.dev/";
 
 ### 3. Host the app
 
+Clone this repo.
 GitHub Pages is included in this repo (`.github/workflows/deploy-pwa.yml` deploys
 the `web/` folder automatically):
 
 1. Repo → **Settings → Pages** → **Source: GitHub Actions** → Save.
 2. The workflow runs on every push that changes `web/`.
-3. Open the resulting `https://adegard.github.io/ytmusic-apk/` URL.
+
 
 ### 4. Install on iPhone
 
