@@ -15,7 +15,7 @@
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
-const APP_VERSION = "1.3.4";
+const APP_VERSION = "1.3.5";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
@@ -264,13 +264,32 @@ function updatePositionState() {
   } catch (e) { /* unsupported */ }
 }
 
-// Stall watchdog: a stuck BUFFERING/UNSTARTED embed (often a failed pre-roll ad)
-// otherwise shows "Loading…" forever. Be PATIENT (slow mobile networks can take
-// a while to buffer): gentle playVideo nudges first, one fresh loadVideoById
-// (the equivalent of a manual retap) mid-way, and only give up after ~60s.
+// Stall watchdog: a stuck BUFFERING/UNSTARTED embed (often a hung pre-roll ad)
+// otherwise shows "Loading…" forever.
+//  - UNSTARTED/CUED with the song's own videoId = the video is loaded but never
+//    starts (hung pre-roll / blocked start). Reload the video — the exact thing
+//    the manual "tap the song again" does — and give up early.
+//  - BUFFERING = genuinely loading on a slow connection; nudge gently and be
+//    patient.
+// After too many attempts, auto-skip to the next queued song so music keeps
+// flowing instead of hanging on a retry message.
 function scheduleStartCheck() {
   clearTimeout(startCheckTimer);
-  startCheckTimer = setTimeout(checkStalled, 8000);
+  startCheckTimer = setTimeout(checkStalled, 6000);
+}
+
+function giveUpStalled(state) {
+  stallCount = 0;
+  setIcon("play");
+  if (queue.length) {
+    dbg("giving up, playing next");
+    playerSub.textContent = "Couldn't start — playing next…";
+    showStatus("Skipped (couldn't start). Playing the next song.");
+    setTimeout(playNext, 1200);
+  } else {
+    playerSub.textContent = "Stalled — tap play to retry";
+    showStatus("Playback stalled (state " + state + "). Press play or tap the song again.");
+  }
 }
 
 function checkStalled() {
@@ -298,23 +317,32 @@ function checkStalled() {
 
   stallCount++;
   dbg("stall check #" + stallCount + ": state=" + state + " videoId=" + (vd ? vd.video_id : "?"));
-  if (stallCount >= 8) {
-    stallCount = 0;
-    playerSub.textContent = "Stalled — tap play to retry";
-    setIcon("play");
-    showStatus("Playback stalled (state " + state + "). Press play or tap the song again.");
+
+  const unstarted = state === -1 || state === YT.PlayerState.CUED;
+
+  if (unstarted) {
+    if (stallCount >= 7) {
+      giveUpStalled(state);
+      return;
+    }
+    if (stallCount >= 2) {
+      dbg("unstarted, reload attempt #" + stallCount);
+      try {
+        ytPlayer.loadVideoById(current.id);
+        ytPlayer.playVideo();
+      } catch (e) { /* ignore */ }
+    }
+    playerSub.textContent = "Still loading…";
+    scheduleStartCheck();
     return;
   }
 
-  if (stallCount === 2 || stallCount === 3 || stallCount === 6 || stallCount === 7) {
+  if (stallCount === 3 || stallCount === 5) {
     try { ytPlayer.playVideo(); } catch (e) { /* ignore */ }
   }
-  if (stallCount === 5) {
-    dbg("fresh reload");
-    try {
-      ytPlayer.loadVideoById(current.id);
-      ytPlayer.playVideo();
-    } catch (e) { /* ignore */ }
+  if (stallCount >= 8) {
+    giveUpStalled(state);
+    return;
   }
   playerSub.textContent = "Still loading…";
   scheduleStartCheck();
