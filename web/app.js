@@ -25,6 +25,7 @@ const resultsEl = document.getElementById("results");
 const playerEl = document.getElementById("player");
 const playerTitle = document.getElementById("player-title");
 const playerSub = document.getElementById("player-sub");
+const playerNextEl = document.getElementById("player-next");
 const toggle = document.getElementById("toggle");
 const iconPause = document.getElementById("icon-pause");
 const iconPlay = document.getElementById("icon-play");
@@ -33,6 +34,8 @@ let current = null;
 let ytPlayer = null;
 let pendingVideoId = null;
 let startCheckTimer = null;
+let queue = [];
+const playedIds = new Set();
 
 // --- proxy helper (search only) -------------------------------------------
 
@@ -93,11 +96,8 @@ function createPlayer() {
 
 function onPlayerReady() {
   if (pendingVideoId) {
-    const id = pendingVideoId;
     pendingVideoId = null;
-    ytPlayer.loadVideoById(id);
-    ytPlayer.playVideo();
-    scheduleStartCheck();
+    if (current) startSong(current);
   }
 }
 
@@ -112,6 +112,7 @@ function onPlayerState(event) {
     event.data === YT.PlayerState.ENDED
   ) {
     setIcon("play");
+    if (event.data === YT.PlayerState.ENDED) playNext();
   }
 }
 
@@ -201,11 +202,21 @@ function renderResults(results) {
 
 // --- playback --------------------------------------------------------------
 
+// Manual selection: reset the suggestion queue and start fresh.
 function play(result) {
+  queue.length = 0;
+  playerNextEl.textContent = "";
+  startSong(result);
+}
+
+function startSong(result) {
   hideStatus();
   current = result;
+  playedIds.add(result.id);
+  if (playedIds.size > 100) playedIds.clear();
   playerTitle.textContent = result.title;
   playerSub.textContent = "Loading…";
+  playerNextEl.textContent = "";
   playerEl.hidden = false;
   setIcon("play");
   setMediaSession(result);
@@ -217,6 +228,46 @@ function play(result) {
   } else {
     pendingVideoId = result.id;
   }
+  fetchSuggestions(result.id);
+}
+
+function playNext() {
+  while (queue.length && (playedIds.has(queue[0].id) || (current && queue[0].id === current.id))) {
+    queue.shift();
+  }
+  if (!queue.length) {
+    showStatus("End of playlist.");
+    return;
+  }
+  const next = queue.shift();
+  startSong(next);
+}
+
+// Load the "Up next" / related list for the current video and append it to the
+// queue. The worker fetches the InnerTube /next response server-side (it is
+// ~12MB and bot-guarded) and returns only the compact suggestion list.
+// Guarded so a slow response can't pollute a newer song's queue.
+async function fetchSuggestions(videoId) {
+  try {
+    const res = await fetch(PROXY + "next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ videoId: videoId }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const suggestions = data.suggestions || [];
+    if (!suggestions.length) return;
+    if (!current || current.id !== videoId) return;
+    const fresh = suggestions.filter(function (s) {
+      return !playedIds.has(s.id) && !queue.some(function (q) { return q.id === s.id; });
+    });
+    if (!fresh.length) return;
+    queue = queue.concat(fresh).slice(0, 10);
+    if (current && current.id === videoId && queue.length) {
+      playerNextEl.textContent = "Up next: " + queue[0].title;
+    }
+  } catch (e) { /* non-fatal */ }
 }
 
 function togglePlayPause() {

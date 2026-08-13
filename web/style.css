@@ -180,6 +180,14 @@ header h1 {
 
 .player-sub { color: var(--muted); font-size: 12px; }
 
+.player-next {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .toggle {
   background: none;
   border: none;
