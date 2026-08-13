@@ -41,6 +41,10 @@ const favToggle = document.getElementById("fav-toggle");
 const heartOutline = document.getElementById("heart-outline");
 const heartFilled = document.getElementById("heart-filled");
 
+favModal.hidden = true;
+playerEl.hidden = true;
+statusEl.hidden = true;
+
 let current = null;
 let ytPlayer = null;
 let pendingVideoId = null;

@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "ytmusic-v11";
+const CACHE = "ytmusic-v12";
 const SHELL = ["./", "./index.html", "./style.css", "./app.js", "./yt.js", "./icon.svg"];
 
 self.addEventListener("install", function (event) {
