@@ -38,8 +38,6 @@ let queue = [];
 let adMuted = false;
 let adCheckTimer = null;
 let stallCount = 0;
-let preRollSkips = 0;
-let videoStartedAt = 0;
 const playedIds = new Set();
 
 // --- proxy helper (search only) -------------------------------------------
@@ -84,6 +82,7 @@ function createPlayer() {
     width: "1",
     playerVars: {
       autoplay: 0,
+      mute: 1,
       playsinline: 1,
       rel: 0,
       controls: 0,
@@ -101,14 +100,14 @@ function createPlayer() {
 }
 
 // --- ad handling -----------------------------------------------------------
-// The IFrame API gives no ad events, but during an ad getVideoData() returns
-// { video_id: "", title: "Advertisement" }. Poll for it and mute the player so
-// ads are silent; unmute as soon as real content plays again.
+// Videos that START muted don't get pre-roll ads, and muted autoplay is always
+// allowed by the browser (no tap gesture needed) — so every song is started
+// muted and unmuted once PLAYING fires. This avoids pre-rolls entirely and
+// makes the auto-queue work even without a fresh tap.
 //
-// A pre-roll ad that fails to start is the most common cause of the player
-// hanging on "Loading…", so if an ad starts right after we began a song we
-// reload the video (up to twice) — usually YouTube then starts the content
-// directly.
+// Mid-roll ads can still appear later. The IFrame API gives no ad events, but
+// during an ad getVideoData() returns { video_id: "", title: "Advertisement" }.
+// Poll for that and mute; unmute when real content plays again.
 function startAdCheck() {
   if (adCheckTimer) return;
   adCheckTimer = setInterval(checkAd, 500);
@@ -135,19 +134,8 @@ function checkAd() {
     if (!adMuted) {
       adMuted = true;
       try { ytPlayer.mute(); } catch (e) { /* ignore */ }
+      playerSub.textContent = "Ad playing (muted)…";
     }
-    // Pre-roll skip: reload shortly after the song started.
-    if (preRollSkips < 2 && current && Date.now() - videoStartedAt < 15000) {
-      preRollSkips++;
-      playerSub.textContent = "Skipping ad…";
-      try {
-        ytPlayer.loadVideoById(current.id);
-        ytPlayer.playVideo();
-        scheduleStartCheck();
-      } catch (e) { /* ignore */ }
-      return;
-    }
-    playerSub.textContent = "Ad playing (muted)…";
   } else if (adMuted) {
     adMuted = false;
     try { ytPlayer.unMute(); } catch (e) { /* ignore */ }
@@ -167,7 +155,12 @@ function onPlayerState(event) {
   if (event.data === YT.PlayerState.PLAYING) {
     stallCount = 0;
     setIcon("pause");
-    if (!adMuted) playerSub.textContent = current.channel;
+    if (adMuted) {
+      playerSub.textContent = "Ad playing (muted)…";
+    } else {
+      playerSub.textContent = current.channel;
+      try { ytPlayer.unMute(); } catch (e) { /* ignore */ }
+    }
     updatePositionState();
   } else if (
     event.data === YT.PlayerState.PAUSED ||
@@ -310,8 +303,6 @@ function startSong(result) {
   playedIds.add(result.id);
   if (playedIds.size > 100) playedIds.clear();
   stallCount = 0;
-  preRollSkips = 0;
-  videoStartedAt = Date.now();
   playerTitle.textContent = result.title;
   playerSub.textContent = "Loading…";
   playerNextEl.textContent = "";
@@ -320,6 +311,7 @@ function startSong(result) {
   setMediaSession(result);
 
   if (ytPlayer && ytPlayer.loadVideoById) {
+    try { ytPlayer.mute(); } catch (e) { /* ignore */ }
     ytPlayer.loadVideoById(result.id);
     ytPlayer.playVideo();
     scheduleStartCheck();
