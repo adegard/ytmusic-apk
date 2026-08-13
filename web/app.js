@@ -15,7 +15,7 @@
 
 const PROXY = "https://ytmusic-proxy.degardinarnaud.workers.dev/";
 
-const APP_VERSION = "1.3.3";
+const APP_VERSION = "1.3.4";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
@@ -64,6 +64,8 @@ let pendingVideoId = null;
 let startCheckTimer = null;
 let queue = [];
 let adMuted = false;
+let adSince = 0;
+let adSkipCount = 0;
 let adCheckTimer = null;
 let stallCount = 0;
 let favorites = [];
@@ -149,22 +151,54 @@ function stopAdCheck() {
   }
 }
 
+// An ad is playing when the player's current "video" is not the requested song.
+// Classic pre-rolls report video_id:"" + title "Advertisement"; newer ad formats
+// report the ad's own real video_id/title, so we also treat ANY video_id that
+// differs from the requested song as an ad. (Transient mismatches during the
+// loadVideoById handover self-correct as soon as the real video reports in.)
+function isAdLike(vd) {
+  if (!vd) return false;
+  if (vd.video_id === "" && (vd.title === "Advertisement" || vd.title === "Video advertising")) {
+    return true;
+  }
+  if (current && vd.video_id && vd.video_id !== current.id) {
+    return true;
+  }
+  return false;
+}
+
 function checkAd() {
   if (!ytPlayer || !ytPlayer.getVideoData) return;
   let vd = null;
   try {
     vd = ytPlayer.getVideoData();
   } catch (e) { return; }
-  const isAd = !!vd &&
-    vd.video_id === "" &&
-    (vd.title === "Advertisement" || vd.title === "Video advertising");
+  const ad = isAdLike(vd);
 
-  if (isAd) {
+  if (ad) {
     if (!adMuted) {
       adMuted = true;
-      dbg("ad detected, muting");
+      adSince = Date.now();
+      dbg("ad detected (vid=" + vd.video_id + "), muting");
       try { ytPlayer.mute(); } catch (e) { /* ignore */ }
       playerSub.textContent = "Ad playing (muted)…";
+    }
+    // Hung ad that never hands off to the real video: reload to skip it. A
+    // fresh load often lands without (or with a different) ad pod.
+    if (adSince && Date.now() - adSince > 8000) {
+      adSince = Date.now();
+      adSkipCount++;
+      if (adSkipCount <= 3) {
+        dbg("hung ad, reload to skip (#" + adSkipCount + ")");
+        try {
+          ytPlayer.loadVideoById(current.id);
+          ytPlayer.playVideo();
+        } catch (e) { /* ignore */ }
+      } else {
+        adMuted = false;
+        setIcon("play");
+        showStatus("Playback stalled (ad won't skip). Press play or tap the song again.");
+      }
     }
   } else if (adMuted) {
     adMuted = false;
@@ -188,7 +222,14 @@ function onPlayerState(event) {
   if (event.data === YT.PlayerState.PLAYING) {
     stallCount = 0;
     setIcon("pause");
-    if (adMuted) {
+    let vd = null;
+    try { vd = ytPlayer.getVideoData(); } catch (e) { /* ignore */ }
+    if (adMuted || isAdLike(vd)) {
+      if (!adMuted) {
+        adMuted = true;
+        adSince = Date.now();
+        dbg("ad detected on PLAYING, muting");
+      }
       playerSub.textContent = "Ad playing (muted)…";
     } else {
       playerSub.textContent = current.channel;
@@ -251,7 +292,7 @@ function checkStalled() {
   // During an ad the player often reports BUFFERING while the (muted) ad plays.
   let vd = null;
   try { vd = ytPlayer.getVideoData(); } catch (e) { /* ignore */ }
-  if (vd && vd.video_id === "" && (vd.title === "Advertisement" || vd.title === "Video advertising")) {
+  if (isAdLike(vd)) {
     return;
   }
 
@@ -349,6 +390,7 @@ function startSong(result) {
   playedIds.add(result.id);
   if (playedIds.size > 100) playedIds.clear();
   stallCount = 0;
+  adSkipCount = 0;
   playerTitle.textContent = result.title;
   playerSub.textContent = "Loading…";
   playerNextEl.textContent = "";
