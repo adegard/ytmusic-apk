@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>YT Music</title>
+  <meta name="description" content="Search and stream songs from YouTube, on-device.">
+  <meta name="theme-color" content="#111111">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>YT Music</h1>
+  </header>
+
+  <form id="search-form">
+    <input id="search-input" type="search" placeholder="Search songs" autocomplete="off" autofocus>
+    <button type="submit" id="search-button">Search</button>
+  </form>
+
+  <div id="status" class="status" hidden></div>
+
+  <main id="results"></main>
+
+  <footer id="player" class="player" hidden>
+    <div class="player-info">
+      <div id="player-title" class="player-title"></div>
+      <div id="player-sub" class="player-sub"></div>
+    </div>
+    <button id="toggle" class="toggle" aria-label="Play/Pause">
+      <svg viewBox="0 0 24 24" width="34" height="34" id="toggle-icon">
+        <path id="icon-pause" fill="currentColor" d="M6 4h4v16H6zM14 4h4v16h-4z"/>
+        <path id="icon-play" fill="currentColor" d="M8 5v14l11-7z" style="display:none"/>
+      </svg>
+    </button>
+  </footer>
+
+  <audio id="audio" preload="none"></audio>
+
+  <script src="yt.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
