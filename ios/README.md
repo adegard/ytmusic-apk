@@ -1,3 +1,5 @@
+[![Buy me a coffee](https://cdn.buymeacoffee.com/buttons/v2/default-red.png)](https://www.buymeacoffee.com/adegard)
+
 # YT Music (iOS)
 
 iOS companion to the [Android app](../README.md): search YouTube and stream songs
