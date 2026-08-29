@@ -3,6 +3,10 @@
 iOS companion to the [Android app](../README.md): search YouTube and stream songs
 on-device — no server, no account.
 
+## Test it!
+
+ https://adegard.github.io/ytmusic-apk/
+
 Everything runs on the device:
 
 - **Search** — the results page HTML is parsed for `ytInitialData` (desktop
