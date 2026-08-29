@@ -31,7 +31,7 @@ Get the latest APK from the **[Releases](https://github.com/adegard/ytmusic-apk/
 
 ## iOS
 
-An iOS companion app (same on-device, no-login approach) lives in the [`ios/`](ios/README.md) folder. eg. you test it here: https://adegard.github.io/ytmusic-apk/
+An iOS companion app (same on-device, no-login approach) lives in the [`ios/`](ios/README.md) folder. eg. you can test it here (using proxy server with live page): https://adegard.github.io/ytmusic-apk/
 
 ## License
 
