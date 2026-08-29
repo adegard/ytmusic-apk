@@ -1,3 +1,5 @@
+[![Buy me a coffee](https://cdn.buymeacoffee.com/buttons/v2/default-red.png)](https://www.buymeacoffee.com/adegard)
+
 # YT Music Search
 
 Search and stream songs from YouTube on your Android phone. Everything runs on-device — no server, no account.
