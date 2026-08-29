@@ -36,3 +36,7 @@ An iOS companion app (same on-device, no-login approach) lives in the [`ios/`](i
 ## License
 
 MIT
+
+---
+
+For an overview of all my other projects, see https://adegard.github.io/blog/
