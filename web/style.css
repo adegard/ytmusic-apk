@@ -129,6 +129,17 @@ header h1 {
   flex-direction: column;
 }
 
+#buy-me-a-coffee {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0 4px;
+}
+
+#buy-me-a-coffee img {
+  width: 220px;
+  height: auto;
+}
+
 .result {
   display: flex;
   gap: 12px;
