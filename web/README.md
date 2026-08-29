@@ -4,6 +4,10 @@ A browser app that searches YouTube and plays songs on-device. Runs on iPhone
 (Safari) and Android, installable to the home screen — no App Store, no Mac, no
 signing.
 
+# Test it!
+
+https://adegard.github.io/ytmusic-apk/
+
 ## How it works
 
 - **Search** — a proxied GET of the YouTube results page, parsed for
