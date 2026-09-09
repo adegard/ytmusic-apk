@@ -10,6 +10,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.ytmusics.net.DownloaderProvider
@@ -49,12 +51,17 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
             .build()
+
+        Companion.activeService = this
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
     override fun onDestroy() {
+        if (Companion.activeService === this) {
+            Companion.activeService = null
+        }
         mediaSession?.run {
             player.release()
             release()
@@ -64,6 +71,10 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
+        @Volatile
+        var activeService: PlaybackService? = null
+            private set
+
         fun buildMediaItem(streamUrl: String, title: String, artist: String): MediaItem =
             MediaItem.Builder()
                 .setUri(streamUrl)
@@ -74,5 +85,28 @@ class PlaybackService : MediaSessionService() {
                         .build()
                 )
                 .build()
+
+        fun playMergedVideo(videoUrl: String, audioUrl: String, title: String, artist: String): Boolean {
+            val player = activeService?.mediaSession?.player as? ExoPlayer ?: return false
+            val dataSourceFactory = OkHttpDataSource.Factory(DownloaderProvider.okHttpClient())
+                .setDefaultRequestProperties(mapOf("Referer" to "https://www.youtube.com/"))
+            val videoItem = MediaItem.Builder()
+                .setUri(videoUrl)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .build()
+                )
+                .build()
+            val video = ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(videoItem)
+            val audio = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(audioUrl))
+            val merged = MergingMediaSource(video, audio)
+            player.setMediaSource(merged)
+            player.prepare()
+            player.playWhenReady = true
+            return true
+        }
     }
 }

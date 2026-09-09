@@ -2,13 +2,29 @@
 <resources>
     <string name="app_name">YT Music Search</string>
     <string name="search_hint">Search YouTube songs…</string>
+    <string name="search_hint_channels">Search YouTube channels…</string>
     <string name="initial_hint">Type a song name and press Search</string>
+    <string name="initial_hint_channels">Type a channel name and press Search</string>
     <string name="searching">Searching for \"%1$s\"…</string>
     <string name="found_count">Found %1$d results</string>
+    <string name="found_channels_count">Found %1$d channels</string>
     <string name="search_timeout">Search timed out. Try again.</string>
     <string name="loading_stream">Loading stream info…</string>
     <string name="stream_timeout">Stream info timed out. Try another song.</string>
     <string name="notification_channel">Playback</string>
     <string name="search">Search</string>
     <string name="no_results">No results found. Try a different search or check your internet connection.</string>
+    <string name="chip_songs">Songs</string>
+    <string name="chip_channels">Channels</string>
+    <string name="tab_search">Search</string>
+    <string name="tab_subscriptions">Subscriptions</string>
+    <string name="subscribe">Subscribe</string>
+    <string name="unsubscribe">Unsubscribe</string>
+    <string name="subscribed">Subscribed to %1$s</string>
+    <string name="unsubscribed">Unsubscribed from %1$s</string>
+    <string name="no_subscriptions">No subscriptions yet.\nSearch for channels and tap Subscribe.</string>
+    <string name="subscribers">%1$s subscribers</string>
+    <string name="toggle_video">Switch to video playback</string>
+    <string name="toggle_audio">Switch to audio playback</string>
+    <string name="back">Back</string>
 </resources>

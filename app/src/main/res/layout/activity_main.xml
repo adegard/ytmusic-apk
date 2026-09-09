@@ -5,55 +5,182 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="12dp">
-
-        <EditText
-            android:id="@+id/searchInput"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="@string/search_hint"
-            android:imeOptions="actionSearch"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:maxLines="1" />
-
-        <Button
-            android:id="@+id/searchButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/search" />
-    </LinearLayout>
-
-    <ProgressBar
-        android:id="@+id/progress"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/emptyText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:padding="24dp"
-        android:text="@string/initial_hint"
-        android:textColor="?android:attr/textColorSecondary" />
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
+    <FrameLayout
+        android:id="@+id/contentArea"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingBottom="4dp" />
+        android:layout_weight="1">
+
+        <!-- Search tab content -->
+        <LinearLayout
+            android:id="@+id/searchTab"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/searchModeGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="12dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="12dp"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipSongs"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/chip_songs" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipChannels"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/chip_channels" />
+            </com.google.android.material.chip.ChipGroup>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="12dp">
+
+                <EditText
+                    android:id="@+id/searchInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/search_hint"
+                    android:imeOptions="actionSearch"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1" />
+
+                <Button
+                    android:id="@+id/searchButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/search" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/emptyText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="24dp"
+                android:text="@string/initial_hint"
+                android:textColor="?android:attr/textColorSecondary" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingBottom="4dp" />
+        </LinearLayout>
+
+        <!-- Subscriptions tab content -->
+        <LinearLayout
+            android:id="@+id/subscriptionsTab"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Subscriptions list view -->
+            <LinearLayout
+                android:id="@+id/subsListView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/subsEmptyText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:text="@string/no_subscriptions"
+                    android:textColor="?android:attr/textColorSecondary" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/subsRecycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
+
+            <!-- Channel videos view -->
+            <LinearLayout
+                android:id="@+id/channelVideosView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <ImageButton
+                        android:id="@+id/backButton"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="?android:attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/back"
+                        android:src="@android:drawable/ic_menu_revert"
+                        android:scaleType="centerInside" />
+
+                    <TextView
+                        android:id="@+id/channelTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/channelProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/channelVideosRecycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:paddingBottom="4dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -61,16 +188,34 @@
         android:background="?android:attr/colorBackgroundFloating"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/nowPlaying"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:paddingStart="16dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="16dp"
-            android:textStyle="bold" />
+            android:paddingTop="4dp"
+            android:paddingEnd="8dp">
+
+            <TextView
+                android:id="@+id/nowPlaying"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/videoToggle"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/toggle_video"
+                android:src="@android:drawable/ic_media_play"
+                android:scaleType="centerInside" />
+        </LinearLayout>
 
         <androidx.media3.ui.PlayerView
             android:id="@+id/playerView"
@@ -79,4 +224,11 @@
             app:show_timeout="0"
             app:use_controller="true" />
     </LinearLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:menu="@menu/bottom_nav_menu" />
+
 </LinearLayout>
