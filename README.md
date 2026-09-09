@@ -7,6 +7,10 @@ Search and stream songs from YouTube on your Android phone. Everything runs on-d
 ## Features
 
 - Search YouTube and play any song
+- Search for channels and subscribe to them (stored locally on device)
+- Subscriptions tab shows the latest video from each channel
+- Browse a channel's recent videos (newest first) and play any of them
+- Toggle between audio-only and video playback
 - Background playback with a media notification
 - Simple, no-login
 
@@ -19,6 +23,12 @@ Get the latest APK from the **[Releases](https://github.com/adegard/ytmusic-apk/
 1. Download the APK from Releases.
 2. Allow "install from unknown sources" when asked.
 3. Search and play.
+
+## Usage
+
+- **Search**: use the *Songs* / *Channels* toggle above the search bar. Searching for channels shows a **Subscribe** button on each result.
+- **Subscriptions**: the bottom *Subscriptions* tab lists all saved channels with their latest video. Tap one to browse its recent videos.
+- **Video playback**: tap the video/audio icon above the player to switch playback mode.
 
 ![Screenshot](docs/screenshot.png)
 
